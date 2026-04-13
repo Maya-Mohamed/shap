@@ -223,3 +223,34 @@ def test_output_composite_image_data_flag():
 
     assert hasattr(output_composite, "image_data")
     assert output_composite.image_data is True
+
+
+def test_output_composite_call_wraps_non_tuple_masker_output():
+    """Test __call__ wraps masker output in a tuple when masker returns a non-tuple."""
+
+    class ArrayMasker(shap.maskers.Masker):
+        def __init__(self):
+            self.shape = (None, 3)
+
+        def __call__(self, mask, x):  # type: ignore[override]
+            # Return a plain array, not a tuple
+            return x * mask
+
+    masker = ArrayMasker()
+
+    def simple_model(x):
+        return np.sum(x)
+
+    output_composite = shap.maskers.OutputComposite(masker, simple_model)
+
+    test_input = np.array([10, 20, 30])
+    mask = np.array([True, False, True])
+
+    result = output_composite(mask, test_input)
+
+    assert isinstance(result, tuple)
+    # 1 from wrapped masker output + 1 from model output (wrapped)
+    assert len(result) == 2
+    np.testing.assert_array_equal(result[0], np.array([10, 0, 30]))
+    # Model receives original args, not masked: np.sum([10, 20, 30]) = 60
+    assert result[1] == 60
